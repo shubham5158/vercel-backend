@@ -4,6 +4,9 @@
   "description": "photo_backend",
   "license": "ISC",
   "author": "",
+  "engines": {
+    "node": "24.x"
+  },
   "type": "module",
 
   "scripts": {
