@@ -5,11 +5,6 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "engines": {
-        "node": "20.x"
-      },
-
-  "main": "api/server.js",
 
   "scripts": {
     "start": "node server.js", 
