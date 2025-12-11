@@ -6,11 +6,14 @@ import Event from "../models/Event.js";
 
 const router = express.Router();
 
+// Generate unique gallery code
 function generateGalleryCode() {
   return crypto.randomBytes(4).toString("hex");
 }
 
-// Create event (belongs to logged-in admin)
+/* ---------------------------------------------
+   CREATE EVENT (Admin Only)
+---------------------------------------------- */
 router.post("/", auth, async (req, res) => {
   try {
     const {
@@ -23,12 +26,13 @@ router.post("/", auth, async (req, res) => {
       expiresAt,
     } = req.body;
 
+    // Generate unique gallery code
     let galleryCode;
     while (true) {
-      const tempCode = generateGalleryCode();
-      const exists = await Event.findOne({ galleryCode: tempCode });
+      const temp = generateGalleryCode();
+      const exists = await Event.findOne({ galleryCode: temp });
       if (!exists) {
-        galleryCode = tempCode;
+        galleryCode = temp;
         break;
       }
     }
@@ -40,9 +44,9 @@ router.post("/", auth, async (req, res) => {
       eventDate,
       location,
       basePricePerPhoto,
-      galleryCode,
       expiresAt,
-      createdBy: req.user.id, // ⭐ OWNER
+      galleryCode,
+      createdBy: req.user.id,
     });
 
     res.status(201).json(event);
@@ -52,26 +56,64 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-// Get all events for THIS admin only
+/* ---------------------------------------------
+   GET EVENTS (Search + Pagination ONLY)
+---------------------------------------------- */
 router.get("/", auth, async (req, res) => {
   try {
-    const events = await Event.find({ createdBy: req.user.id }).sort({
-      createdAt: -1,
+    const {
+      search = "",
+      page = 1,
+      limit = 10,
+    } = req.query;
+
+    const query = { createdBy: req.user.id };
+
+    // 🔍 SIMPLE SEARCH across fields
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { clientName: { $regex: search, $options: "i" } },
+        { clientEmail: { $regex: search, $options: "i" } },
+        { location: { $regex: search, $options: "i" } },
+        { galleryCode: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Get total count
+    const total = await Event.countDocuments(query);
+
+    // Fetch events
+    const events = await Event.find(query)
+      .sort({ createdAt: -1 }) // always newest first
+      .skip(skip)
+      .limit(Number(limit));
+
+    return res.json({
+      events,
+      total,
+      page: Number(page),
+      totalPages: Math.ceil(total / limit),
     });
-    res.json(events);
+
   } catch (err) {
     console.error("Fetch events error:", err);
     res.status(500).json({ message: "Fetch events error" });
   }
 });
 
-// Get single event – only if it belongs to this admin
+/* ---------------------------------------------
+   GET SINGLE EVENT (Admin Only)
+---------------------------------------------- */
 router.get("/:id", auth, async (req, res) => {
   try {
     const event = await Event.findOne({
       _id: req.params.id,
       createdBy: req.user.id,
     });
+
     if (!event) return res.status(404).json({ message: "Not found" });
 
     res.json(event);
@@ -81,7 +123,9 @@ router.get("/:id", auth, async (req, res) => {
   }
 });
 
-// Update event – only own events
+/* ---------------------------------------------
+   UPDATE EVENT (Admin Only)
+---------------------------------------------- */
 router.patch("/:id", auth, async (req, res) => {
   try {
     const updated = await Event.findOneAndUpdate(
@@ -89,6 +133,7 @@ router.patch("/:id", auth, async (req, res) => {
       req.body,
       { new: true }
     );
+
     if (!updated) return res.status(404).json({ message: "Not found" });
 
     res.json(updated);
@@ -98,7 +143,9 @@ router.patch("/:id", auth, async (req, res) => {
   }
 });
 
-// Delete event – only own events
+/* ---------------------------------------------
+   DELETE EVENT (Admin Only)
+---------------------------------------------- */
 router.delete("/:id", auth, async (req, res) => {
   try {
     const deleted = await Event.findOneAndDelete({
